@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Face VC 고객현황 대시보드</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; background: #f0f2f5; color: #333; }
+
+    /* ── Header ── */
+    .header {
+      background: #1a56db; color: white;
+      padding: 16px 28px;
+      display: flex; align-items: center; justify-content: space-between;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    }
+    .header h1 { font-size: 19px; font-weight: 600; letter-spacing: -0.3px; }
+    #loginBtn {
+      background: white; color: #1a56db;
+      border: none; padding: 7px 18px;
+      border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 600;
+    }
+    #loginBtn:hover { background: #e8f0fe; }
+
+    .container { padding: 24px 28px; max-width: 1600px; margin: 0 auto; }
+
+    /* ── Login / Loading ── */
+    .login-screen {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      height: 65vh; gap: 14px;
+    }
+    .login-screen .icon { font-size: 48px; }
+    .login-screen p { color: #666; font-size: 15px; }
+    .login-btn-large {
+      background: #1a56db; color: white;
+      border: none; padding: 12px 36px;
+      border-radius: 8px; font-size: 15px; cursor: pointer; font-weight: 600; margin-top: 8px;
+    }
+    .login-btn-large:hover { background: #1447c0; }
+    .loading {
+      display: flex; align-items: center; justify-content: center;
+      height: 65vh; flex-direction: column; gap: 12px;
+    }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid #e5e7eb; border-top-color: #1a56db;
+      border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Filters ── */
+    .filters {
+      background: white; padding: 14px 18px;
+      border-radius: 10px; margin-bottom: 18px;
+      display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+    }
+    .filter-group { display: flex; flex-direction: column; gap: 5px; }
+    .filter-group label { font-size: 11px; color: #888; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .filter-group select {
+      padding: 7px 12px; border: 1px solid #e0e0e0;
+      border-radius: 6px; font-size: 13px; min-width: 150px;
+      background: #fafafa; cursor: pointer; font-family: inherit;
+    }
+    .filter-group select:focus { outline: none; border-color: #1a56db; }
+
+    /* Search input */
+    .search-wrap { position: relative; display: flex; align-items: center; }
+    .search-wrap svg {
+      position: absolute; left: 10px;
+      color: #aaa; pointer-events: none; flex-shrink: 0;
+    }
+    .search-wrap input {
+      padding: 7px 12px 7px 34px;
+      border: 1px solid #e0e0e0; border-radius: 6px;
+      font-size: 13px; min-width: 200px; background: #fafafa;
+      font-family: inherit; transition: border-color 0.15s;
+    }
+    .search-wrap input:focus { outline: none; border-color: #1a56db; background: white; }
+    .search-clear {
+      position: absolute; right: 8px;
+      background: none; border: none; cursor: pointer;
+      color: #aaa; font-size: 16px; line-height: 1; padding: 2px;
+    }
+    .search-clear:hover { color: #555; }
+
+    .filter-divider { width: 1px; background: #e5e7eb; align-self: stretch; margin: 4px 0; }
+    .reset-btn {
+      background: #f3f4f6; color: #555;
+      border: 1px solid #e0e0e0; padding: 7px 14px;
+      border-radius: 6px; font-size: 13px; cursor: pointer;
+      font-family: inherit; align-self: flex-end;
+    }
+    .reset-btn:hover { background: #e5e7eb; }
+
+    /* ── KPI ── */
+    .kpi-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 14px; margin-bottom: 18px;
+    }
+    .kpi-card {
+      background: white; padding: 20px 22px;
+      border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+      display: flex; align-items: center; gap: 16px;
+    }
+    .kpi-icon { font-size: 28px; }
+    .kpi-value { font-size: 30px; font-weight: 700; color: #1a56db; line-height: 1; }
+    .kpi-label { font-size: 13px; color: #888; margin-top: 4px; }
+
+    /* ── Charts ── */
+    .charts-grid {
+      display: grid; grid-template-columns: 320px 1fr;
+      gap: 14px; margin-bottom: 18px;
+    }
+    .chart-card {
+      background: white; padding: 20px;
+      border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+    }
+    .chart-card h3 { font-size: 14px; font-weight: 600; color: #555; margin-bottom: 14px; }
+
+    /* Service buttons */
+    .svc-btn-wrap { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+    .svc-btn {
+      padding: 5px 12px; border: 1px solid #d1d5db; border-radius: 20px;
+      font-size: 12px; cursor: pointer; background: white; color: #555;
+      font-family: inherit; transition: all 0.15s; white-space: nowrap;
+    }
+    .svc-btn:hover { border-color: #1a56db; color: #1a56db; }
+    .svc-btn.active { background: #1a56db; color: white; border-color: #1a56db; font-weight: 600; }
+
+    /* Donut */
+    .donut-wrap { display: flex; align-items: center; gap: 20px; }
+    .donut-canvas-wrap { flex: 0 0 200px; height: 200px; position: relative; }
+    .donut-center-text {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center; pointer-events: none;
+    }
+    .donut-center-text .total { font-size: 22px; font-weight: 700; color: #222; }
+    .donut-center-text .sub { font-size: 11px; color: #999; }
+    .donut-legend {
+      flex: 1; display: flex; flex-direction: column; gap: 4px;
+      max-height: 220px; overflow-y: auto;
+    }
+    .legend-item {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px; padding: 5px 7px; border-radius: 6px;
+      cursor: pointer; transition: background 0.12s;
+    }
+    .legend-item:hover { background: #f0f4ff; }
+    .legend-item.selected { background: #e8f0fe; }
+    .legend-item.selected .legend-label { font-weight: 600; color: #1a56db; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .legend-label { color: #444; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+    .legend-count { font-weight: 600; color: #222; white-space: nowrap; }
+    .legend-pct { font-size: 11px; color: #aaa; min-width: 44px; text-align: right; }
+
+    /* ── Table ── */
+    .table-card {
+      background: white; padding: 20px;
+      border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+    }
+    .table-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px; flex-wrap: wrap; gap: 8px;
+    }
+    .table-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .table-header h3 { font-size: 14px; font-weight: 600; color: #555; }
+    .table-count { font-size: 13px; color: #aaa; white-space: nowrap; }
+
+    .segment-tag {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: #e8f0fe; color: #1a56db;
+      padding: 2px 10px; border-radius: 14px; font-size: 12px; font-weight: 500;
+    }
+    .all-btn {
+      background: white; color: #1a56db;
+      border: 1.5px solid #1a56db; padding: 3px 12px;
+      border-radius: 14px; font-size: 12px; cursor: pointer;
+      font-family: inherit; font-weight: 600; transition: all 0.12s;
+    }
+    .all-btn:hover { background: #1a56db; color: white; }
+
+    /* Scrollable table container */
+    .table-scroll {
+      overflow: auto;
+      max-height: 540px;
+      border: 1px solid #e8eaf0;
+      border-radius: 8px;
+    }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead { position: sticky; top: 0; z-index: 10; }
+
+    th {
+      background: #f1f3f9; padding: 10px 14px;
+      text-align: left; border-bottom: 2px solid #dde2ee;
+      white-space: nowrap; font-size: 12px; color: #4a5568; font-weight: 700;
+    }
+    /* Sticky 고객명 column */
+    th.col-name {
+      position: sticky; left: 0; z-index: 11; background: #f1f3f9;
+      min-width: 160px; border-right: 2px solid #dde2ee;
+    }
+    th.col-cls { min-width: 110px; }
+    th.col-svc { min-width: 90px; text-align: center; }
+
+    td {
+      padding: 9px 14px; border-bottom: 1px solid #f0f2f7;
+      vertical-align: middle;
+    }
+    tr:nth-child(even) td { background: #fafbfd; }
+    tr:hover td { background: #eef3ff !important; transition: background 0.1s; }
+    tr:last-child td { border-bottom: none; }
+
+    td.col-name {
+      position: sticky; left: 0; z-index: 5;
+      background: white; min-width: 160px;
+      font-weight: 600; color: #1a202c;
+      border-right: 1px solid #e8eaf0;
+    }
+    tr:nth-child(even) td.col-name { background: #fafbfd; }
+    tr:hover td.col-name { background: #eef3ff !important; }
+
+    td.col-cls { color: #555; }
+    td.col-svc { text-align: center; }
+
+    .badge {
+      display: inline-block; padding: 3px 10px; border-radius: 12px;
+      font-size: 11px; background: #e8f0fe; color: #1a56db; font-weight: 500;
+      white-space: nowrap;
+    }
+    .badge.alchera { background: #1a56db; color: white; }
+
+    /* Highlight row for search match */
+    .row-highlight td { background: #fffbeb !important; }
+    .row-highlight td.col-name { background: #fffbeb !important; }
+
+    /* No results */
+    .no-results {
+      text-align: center; padding: 40px; color: #aaa; font-size: 14px;
+    }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Face VC 고객현황 대시보드</h1>
+    <button id="loginBtn" onclick="handleAuth()">Google 로그인</button>
+  </div>
+
+  <div class="container">
+    <div id="loginScreen" class="login-screen">
+      <div class="icon">📊</div>
+      <p>Google 계정으로 로그인하여 대시보드를 확인하세요</p>
+      <button class="login-btn-large" onclick="handleAuth()">Google 계정으로 로그인</button>
+    </div>
+
+    <div id="loadingScreen" class="loading hidden">
+      <div class="spinner"></div>
+      <p style="color:#888;font-size:14px;">데이터를 불러오는 중...</p>
+    </div>
+
+    <div id="dashboard" class="hidden">
+
+      <!-- Filters -->
+      <div class="filters">
+        <div class="filter-group">
+          <label>대분류</label>
+          <select id="filterLarge" onchange="onFilterChange('large')"><option value="">전체</option></select>
+        </div>
+        <div class="filter-group">
+          <label>중분류</label>
+          <select id="filterMedium" onchange="onFilterChange('medium')"><option value="">전체</option></select>
+        </div>
+        <div class="filter-group">
+          <label>소분류</label>
+          <select id="filterSmall" onchange="onFilterChange('small')"><option value="">전체</option></select>
+        </div>
+        <div class="filter-divider"></div>
+        <div class="filter-group">
+          <label>고객명 검색</label>
+          <div class="search-wrap">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" id="searchInput" placeholder="고객명 입력..." oninput="onSearchInput()">
+            <button class="search-clear hidden" id="searchClear" onclick="clearSearch()">×</button>
+          </div>
+        </div>
+        <button class="reset-btn" onclick="resetFilters()">전체 초기화</button>
+      </div>
+
+      <!-- KPI -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-icon">🏢</div>
+          <div>
+            <div class="kpi-value" id="kpiTotal">-</div>
+            <div class="kpi-label">총 고객수</div>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon">📋</div>
+          <div>
+            <div class="kpi-value" id="kpiContracts">-</div>
+            <div class="kpi-label">총 수주건수</div>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon">⚙️</div>
+          <div>
+            <div class="kpi-value" id="kpiServices">-</div>
+            <div class="kpi-label">서비스 종류</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts -->
+      <div class="charts-grid">
+        <div class="chart-card">
+          <h3>대분류별 고객 분포</h3>
+          <div style="height:260px"><canvas id="chartPie"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3>서비스별 수주 현황</h3>
+          <div class="svc-btn-wrap" id="serviceBtns"></div>
+          <div class="donut-wrap">
+            <div class="donut-canvas-wrap">
+              <canvas id="chartServiceDonut"></canvas>
+              <div class="donut-center-text">
+                <div class="total" id="donutTotal">-</div>
+                <div class="sub">전체 고객</div>
+              </div>
+            </div>
+            <div class="donut-legend" id="donutLegend"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="table-card">
+        <div class="table-header">
+          <div class="table-title-row">
+            <h3>고객 목록</h3>
+            <span id="segmentTag" class="segment-tag hidden"></span>
+            <button id="allBtn" class="all-btn hidden" onclick="clearSegment()">(전체)</button>
+          </div>
+          <span class="table-count" id="tableCount"></span>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead id="tableHead"></thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="https://accounts.google.com/gsi/client"></script>
+  <script>
+    const CLIENT_ID = '105338541859-gej7dcb0149t1m61vvj65f16qg5sa9q6.apps.googleusercontent.com';
+    const SPREADSHEET_ID = '1jSA2KnUKD8sbdk89-mapLCf6vqGJXm2VkTUQO6_Mc3E';
+    const SHEET_NAME = '고객현황';
+    const INFO_COLS = 4;
+
+    let tokenClient, accessToken = null;
+    let allData = [], headers = [], serviceHeaders = [];
+    let selectedService = null;
+    let selectedSegment = null;
+    let searchQuery = '';
+    let pieChart = null, serviceDonutChart = null;
+
+    const COLORS = [
+      '#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6',
+      '#06b6d4','#f97316','#84cc16','#ec4899','#14b8a6',
+      '#6366f1','#d97706','#0284c7','#16a34a','#dc2626'
+    ];
+    const COLOR_ALCHERA = '#1a56db';
+    const COLOR_UNKNOWN = '#e5e7eb';
+
+    window.onload = () => {
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: 'https://www.googleapis.com/auth/spreadsheets.readonly',
+        callback: (response) => {
+          if (response.error) { alert('로그인 실패: ' + response.error); return; }
+          accessToken = response.access_token;
+          showLoading();
+          fetchSheetData();
+        }
+      });
+    };
+
+    function handleAuth() { tokenClient.requestAccessToken(); }
+
+    function showLoading() {
+      document.getElementById('loginScreen').classList.add('hidden');
+      document.getElementById('loadingScreen').classList.remove('hidden');
+    }
+
+    async function fetchSheetData() {
+      try {
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(SHEET_NAME)}`;
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+        if (!res.ok) throw new Error(`API 오류: ${res.status}`);
+        const json = await res.json();
+        const rows = json.values;
+        if (!rows || rows.length < 2) throw new Error('데이터가 없습니다.');
+
+        headers = rows[0];
+        serviceHeaders = headers.slice(INFO_COLS);
+
+        allData = rows.slice(1)
+          .map(row => {
+            const obj = {};
+            headers.forEach((h, i) => { obj[h] = (row[i] || '').trim(); });
+            return obj;
+          })
+          .filter(row => row[headers[0]]);
+
+        initFilters();
+        initServiceButtons();
+        renderDashboard(allData);
+
+        document.getElementById('loadingScreen').classList.add('hidden');
+        document.getElementById('dashboard').classList.remove('hidden');
+      } catch (e) {
+        alert('데이터 로드 실패: ' + e.message);
+        document.getElementById('loadingScreen').classList.add('hidden');
+        document.getElementById('loginScreen').classList.remove('hidden');
+      }
+    }
+
+    // ── Filters ──────────────────────────────────────────────
+    function initFilters() {
+      populateSelect('filterLarge', uniqueSorted(allData.map(r => r[headers[1]])));
+      populateSelect('filterMedium', []);
+      populateSelect('filterSmall', []);
+    }
+
+    function populateSelect(id, values) {
+      const sel = document.getElementById(id);
+      const cur = sel.value;
+      sel.innerHTML = '<option value="">전체</option>';
+      values.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v; opt.textContent = v;
+        if (v === cur) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    }
+
+    function onFilterChange(level) {
+      const large = document.getElementById('filterLarge').value;
+      if (level === 'large') {
+        const sub = large ? allData.filter(r => r[headers[1]] === large) : allData;
+        populateSelect('filterMedium', uniqueSorted(sub.map(r => r[headers[2]])));
+        populateSelect('filterSmall', []);
+      }
+      if (level === 'medium') {
+        let sub = large ? allData.filter(r => r[headers[1]] === large) : allData;
+        const med = document.getElementById('filterMedium').value;
+        if (med) sub = sub.filter(r => r[headers[2]] === med);
+        populateSelect('filterSmall', uniqueSorted(sub.map(r => r[headers[3]])));
+      }
+      selectedSegment = null;
+      renderDashboard(getFilteredData());
+    }
+
+    function getFilteredData() {
+      const large = document.getElementById('filterLarge').value;
+      const medium = document.getElementById('filterMedium').value;
+      const small = document.getElementById('filterSmall').value;
+      return allData.filter(r =>
+        (!large  || r[headers[1]] === large) &&
+        (!medium || r[headers[2]] === medium) &&
+        (!small  || r[headers[3]] === small)
+      );
+    }
+
+    function resetFilters() {
+      selectedSegment = null;
+      searchQuery = '';
+      document.getElementById('searchInput').value = '';
+      document.getElementById('searchClear').classList.add('hidden');
+      initFilters();
+      renderDashboard(allData);
+    }
+
+    // ── Search ────────────────────────────────────────────────
+    function onSearchInput() {
+      searchQuery = document.getElementById('searchInput').value;
+      document.getElementById('searchClear').classList.toggle('hidden', !searchQuery);
+      renderTable(getFilteredData());
+    }
+
+    function clearSearch() {
+      searchQuery = '';
+      document.getElementById('searchInput').value = '';
+      document.getElementById('searchClear').classList.add('hidden');
+      renderTable(getFilteredData());
+    }
+
+    // ── Service buttons ───────────────────────────────────────
+    function initServiceButtons() {
+      const container = document.getElementById('serviceBtns');
+      container.innerHTML = '';
+      serviceHeaders.forEach((h, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'svc-btn' + (i === 0 ? ' active' : '');
+        btn.textContent = h;
+        btn.dataset.service = h;
+        btn.onclick = () => selectService(h);
+        container.appendChild(btn);
+      });
+      if (serviceHeaders.length > 0) selectedService = serviceHeaders[0];
+    }
+
+    function selectService(name) {
+      selectedService = name;
+      selectedSegment = null;
+      document.querySelectorAll('.svc-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.service === name);
+      });
+      updateSegmentUI();
+      renderServiceDonut(getFilteredData());
+      renderTable(getFilteredData());
+    }
+
+    function filterTableBySegment(label) {
+      selectedSegment = selectedSegment === label ? null : label;
+      updateSegmentUI();
+      renderServiceDonut(getFilteredData());
+      renderTable(getFilteredData());
+    }
+
+    function clearSegment() {
+      selectedSegment = null;
+      updateSegmentUI();
+      renderServiceDonut(getFilteredData());
+      renderTable(getFilteredData());
+    }
+
+    function updateSegmentUI() {
+      const tag = document.getElementById('segmentTag');
+      const btn = document.getElementById('allBtn');
+      if (selectedSegment && selectedService) {
+        tag.textContent = `${selectedService}: ${selectedSegment}`;
+        tag.classList.remove('hidden');
+        btn.classList.remove('hidden');
+      } else {
+        tag.classList.add('hidden');
+        btn.classList.add('hidden');
+      }
+    }
+
+    // ── Render ────────────────────────────────────────────────
+    function renderDashboard(data) {
+      updateSegmentUI();
+
+      const totalContracts = data.reduce((sum, row) =>
+        sum + serviceHeaders.filter(h => row[h]).length, 0);
+      document.getElementById('kpiTotal').textContent = data.length.toLocaleString();
+      document.getElementById('kpiContracts').textContent = totalContracts.toLocaleString();
+      document.getElementById('kpiServices').textContent = serviceHeaders.length.toLocaleString();
+
+      // 대분류 pie
+      const largeCounts = {};
+      data.forEach(r => {
+        const l = r[headers[1]] || '미분류';
+        largeCounts[l] = (largeCounts[l] || 0) + 1;
+      });
+      const pieLabels = Object.keys(largeCounts).sort((a, b) => largeCounts[b] - largeCounts[a]);
+      const pieValues = pieLabels.map(k => largeCounts[k]);
+
+      if (pieChart) pieChart.destroy();
+      pieChart = new Chart(document.getElementById('chartPie'), {
+        type: 'doughnut',
+        data: { labels: pieLabels, datasets: [{ data: pieValues, backgroundColor: COLORS, borderWidth: 2 }] },
+        options: {
+          responsive: true, maintainAspectRatio: true,
+          plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 8 } } }
+        }
+      });
+
+      renderServiceDonut(data);
+      renderTable(data);
+    }
+
+    function renderServiceDonut(data) {
+      if (!selectedService) return;
+
+      const counts = {};
+      data.forEach(row => {
+        const val = (row[selectedService] || '').trim();
+        const key = val || '미파악';
+        counts[key] = (counts[key] || 0) + 1;
+      });
+
+      const alchera = counts['알체라'] ? [['알체라', counts['알체라']]] : [];
+      const unknown = counts['미파악'] ? [['미파악', counts['미파악']]] : [];
+      const others  = Object.entries(counts)
+                       .filter(([k]) => k !== '알체라' && k !== '미파악')
+                       .sort((a, b) => b[1] - a[1]);
+      const ordered = [...alchera, ...others, ...unknown];
+
+      const total = data.length;
+      const labels = ordered.map(([k]) => k);
+      const values = ordered.map(([, v]) => v);
+      const colors = labels.map(l => {
+        if (l === '알체라') return COLOR_ALCHERA;
+        if (l === '미파악') return COLOR_UNKNOWN;
+        const idx = others.findIndex(([k]) => k === l);
+        return COLORS[(idx + 2) % COLORS.length];
+      });
+
+      if (serviceDonutChart) serviceDonutChart.destroy();
+      serviceDonutChart = new Chart(document.getElementById('chartServiceDonut'), {
+        type: 'doughnut',
+        data: {
+          labels,
+          datasets: [{
+            data: values,
+            backgroundColor: colors,
+            borderWidth: labels.map(l => l === selectedSegment ? 3 : 1.5),
+            borderColor: labels.map(l => l === selectedSegment ? '#1a2e6e' : '#fff'),
+            offset: labels.map(l => l === selectedSegment ? 10 : 0),
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, cutout: '68%',
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => {
+                  const pct = ((ctx.parsed / total) * 100).toFixed(1);
+                  return ` ${ctx.label}: ${ctx.parsed}건 (${pct}%)`;
+                }
+              }
+            }
+          },
+          onClick: (_, elements) => {
+            if (elements.length > 0) filterTableBySegment(labels[elements[0].index]);
+          },
+          onHover: (event, elements) => {
+            event.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+          }
+        }
+      });
+
+      document.getElementById('donutTotal').textContent = total.toLocaleString();
+
+      const legend = document.getElementById('donutLegend');
+      legend.innerHTML = '';
+      ordered.forEach(([label, count], i) => {
+        const pct = ((count / total) * 100).toFixed(1);
+        const isSelected = label === selectedSegment;
+        const div = document.createElement('div');
+        div.className = 'legend-item' + (isSelected ? ' selected' : '');
+        div.onclick = () => filterTableBySegment(label);
+        div.innerHTML = `
+          <div class="legend-dot" style="background:${colors[i]}"></div>
+          <span class="legend-label" title="${label}">${label}</span>
+          <span class="legend-count">${count}건</span>
+          <span class="legend-pct">${pct}%</span>`;
+        legend.appendChild(div);
+      });
+    }
+
+    function renderTable(data) {
+      // 1) 세그먼트 필터
+      let tableData = data;
+      if (selectedSegment && selectedService) {
+        tableData = data.filter(row => {
+          const val = (row[selectedService] || '').trim();
+          return selectedSegment === '미파악' ? !val : val === selectedSegment;
+        });
+      }
+
+      // 2) 고객명 검색 (like, 대소문자 무시)
+      const query = searchQuery.trim().toLowerCase();
+      const hasSearch = query.length > 0;
+      if (hasSearch) {
+        tableData = tableData.filter(row =>
+          (row[headers[0]] || '').toLowerCase().includes(query)
+        );
+      }
+
+      const thead = document.getElementById('tableHead');
+      const tbody = document.getElementById('tableBody');
+      thead.innerHTML = ''; tbody.innerHTML = '';
+
+      // Header
+      const trh = document.createElement('tr');
+      headers.forEach((h, i) => {
+        const th = document.createElement('th');
+        th.textContent = h;
+        if (i === 0) th.className = 'col-name';
+        else if (i < INFO_COLS) th.className = 'col-cls';
+        else th.className = 'col-svc';
+        trh.appendChild(th);
+      });
+      thead.appendChild(trh);
+
+      if (tableData.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = headers.length;
+        td.className = 'no-results';
+        td.textContent = hasSearch ? `"${searchQuery}"에 해당하는 고객이 없습니다.` : '표시할 데이터가 없습니다.';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+      } else {
+        tableData.forEach(row => {
+          const tr = document.createElement('tr');
+          headers.forEach((h, i) => {
+            const td = document.createElement('td');
+            const val = row[h] || '';
+            if (i === 0) {
+              td.className = 'col-name';
+              // 검색어 하이라이트
+              if (hasSearch && val.toLowerCase().includes(query)) {
+                const idx = val.toLowerCase().indexOf(query);
+                td.innerHTML =
+                  escHtml(val.slice(0, idx)) +
+                  `<mark style="background:#fde68a;border-radius:2px;padding:0 1px">${escHtml(val.slice(idx, idx + query.length))}</mark>` +
+                  escHtml(val.slice(idx + query.length));
+              } else {
+                td.textContent = val;
+              }
+            } else if (i < INFO_COLS) {
+              td.className = 'col-cls';
+              td.textContent = val;
+            } else {
+              td.className = 'col-svc';
+              if (val) {
+                const cls = val === '알체라' ? 'badge alchera' : 'badge';
+                td.innerHTML = `<span class="${cls}">${escHtml(val)}</span>`;
+              }
+            }
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+      }
+
+      // Count 표시
+      const parts = [];
+      if (selectedSegment) parts.push(`전체 ${data.length}개 중`);
+      if (hasSearch) parts.push(`검색: "${searchQuery}"`);
+      const prefix = parts.length ? parts.join(' · ') + '  ' : '';
+      document.getElementById('tableCount').textContent = `${prefix}${tableData.length}개 표시 중`;
+    }
+
+    function escHtml(str) {
+      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function uniqueSorted(arr) {
+      return [...new Set(arr.filter(Boolean))].sort();
+    }
+  </script>
+</body>
+</html>
