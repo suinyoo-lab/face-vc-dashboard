@@ -377,6 +377,27 @@
     let searchQuery = '';
     let pieChart = null, serviceDonutChart = null;
 
+    const TOKEN_KEY  = 'facevc_token';
+    const EXPIRY_KEY = 'facevc_expiry';
+
+    function saveToken(token) {
+      localStorage.setItem(TOKEN_KEY, token);
+      localStorage.setItem(EXPIRY_KEY, String(Date.now() + 24 * 60 * 60 * 1000));
+    }
+    function loadToken() {
+      const token  = localStorage.getItem(TOKEN_KEY);
+      const expiry = Number(localStorage.getItem(EXPIRY_KEY) || 0);
+      if (token && Date.now() < expiry) return token;
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(EXPIRY_KEY);
+      return null;
+    }
+    function clearToken() {
+      accessToken = null;
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(EXPIRY_KEY);
+    }
+
     const COLORS = [
       '#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6',
       '#06b6d4','#f97316','#84cc16','#ec4899','#14b8a6',
@@ -385,20 +406,36 @@
     const COLOR_ALCHERA = '#1a56db';
     const COLOR_UNKNOWN = '#e5e7eb';
 
+    function handleTokenResponse(response) {
+      if (response.error) {
+        clearToken();
+        document.getElementById('loadingScreen').classList.add('hidden');
+        document.getElementById('loginScreen').classList.remove('hidden');
+        return;
+      }
+      accessToken = response.access_token;
+      saveToken(accessToken);
+      showLoading();
+      fetchSheetData();
+    }
+
     window.onload = () => {
       tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: CLIENT_ID,
         scope: 'https://www.googleapis.com/auth/spreadsheets.readonly',
-        callback: (response) => {
-          if (response.error) { alert('로그인 실패: ' + response.error); return; }
-          accessToken = response.access_token;
-          showLoading();
-          fetchSheetData();
-        }
+        callback: handleTokenResponse,
       });
+
+      // 캐시된 토큰이 있으면 바로 로드
+      const cached = loadToken();
+      if (cached) {
+        accessToken = cached;
+        showLoading();
+        fetchSheetData();
+      }
     };
 
-    function handleAuth() { tokenClient.requestAccessToken(); }
+    function handleAuth() { tokenClient.requestAccessToken({ prompt: '' }); }
 
     function showLoading() {
       document.getElementById('loginScreen').classList.add('hidden');
@@ -409,6 +446,12 @@
       try {
         const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(SHEET_NAME)}`;
         const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+        if (res.status === 401) {
+          clearToken();
+          document.getElementById('loadingScreen').classList.add('hidden');
+          document.getElementById('loginScreen').classList.remove('hidden');
+          return;
+        }
         if (!res.ok) throw new Error(`API 오류: ${res.status}`);
         const json = await res.json();
         const rows = json.values;
